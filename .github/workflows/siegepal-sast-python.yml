@@ -1,0 +1,43 @@
+name: SiegePal Python SAST
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install scanners
+        run: pip install --disable-pip-version-check --no-cache-dir semgrep bandit
+      - name: Run Semgrep
+        run: semgrep --config auto --sarif --output semgrep.sarif . || true
+      - name: Run Bandit
+        run: bandit -r . -f json -o bandit.json || true
+      - name: Upload SARIF
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: siegepal-sast-results
+          path: |
+            semgrep.sarif
+            bandit.json
+      - name: Notify SiegePal
+        continue-on-error: true
+        env:
+          SIEGEPAL_CALLBACK_URL: "https://siegepal.example/api/github/callback"
+        run: >
+          curl -sS -X POST "$SIEGEPAL_CALLBACK_URL"
+          -H "Content-Type: application/json"
+          -d '{"repository":"danielbuilescu-eng/test3","run_id":"${{ github.run_id }}","category":"sast"}'
+          || true
