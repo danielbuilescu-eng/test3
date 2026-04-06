@@ -1,0 +1,29 @@
+name: SiegePal IaC Checkov
+on:
+  workflow_dispatch:
+jobs:
+  iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        run: checkov -d . -o sarif --output-file-path console,checkov.sarif || true
+      - name: Upload SARIF
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: siegepal-iac-results
+          path: checkov.sarif
+      - name: Notify SiegePal
+        continue-on-error: true
+        env:
+          SIEGEPAL_CALLBACK_URL: "https://siegepal.example/api/github/callback"
+        run: >
+          curl -sS -X POST "$SIEGEPAL_CALLBACK_URL"
+          -H "Content-Type: application/json"
+          -d '{"repository":"danielbuilescu-eng/test3","run_id":"${{ github.run_id }}","category":"iac"}'
+          || true
