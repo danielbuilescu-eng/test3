@@ -1,0 +1,37 @@
+name: SiegePal SCA Generic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy FS SARIF scan
+        run: docker run --rm -v "$PWD:/workspace" aquasec/trivy:0.56.1 fs --exit-code 0 --format sarif --output /workspace/trivy.sarif /workspace
+      - name: Run Trivy FS JSON scan (vuln+secret+misconfig+license)
+        run: docker run --rm -v "$PWD:/workspace" aquasec/trivy:0.56.1 fs --exit-code 0 --scanners vuln,secret,misconfig,license --format json --output /workspace/trivy.json /workspace
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: siegepal-sca-results
+          path: |
+            trivy.sarif
+            trivy.json
+      - name: Upload SARIF
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+      - name: Notify SiegePal
+        continue-on-error: true
+        env:
+          SIEGEPAL_CALLBACK_URL: "https://siegepal.example/api/github/callback"
+        run: >
+          curl -sS -X POST "$SIEGEPAL_CALLBACK_URL"
+          -H "Content-Type: application/json"
+          -d '{"repository":"danielbuilescu-eng/test3","run_id":"${{ github.run_id }}","category":"sca"}'
+          || true
